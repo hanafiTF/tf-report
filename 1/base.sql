@@ -1,66 +1,35 @@
-# case 2: 
-# analis NON trading | db: mainmeta2
-SELECT a.crm_id, a.ims_id, brokers.codename FROM srcims a
-INNER JOIN brokers ON a.source = brokers.id
-LEFT JOIN brokers parent ON brokers.parent_id = parent.id
-WHERE email_ver = 1 AND a.id IN(SELECT srcims_id FROM srcims_deposit WHERE srcims_id IS NOT NULL GROUP BY srcims_id)
-
-# find free + paid sub setiap user | db: tf2
-SELECT
-	max(a.id) AS id,
-	a.channel_id,
-	b.price AS channel_price,
-	CASE
-		WHEN COUNT(a.id) < 2
-		AND TIMESTAMPDIFF (SECOND, MIN(a.CREATED_AT), MAX(a.EXPIRED)) > 2591999 THEN DATE_ADD(DATE_ADD(MAX(a.EXPIRED), INTERVAL -30 DAY), INTERVAL 1 SECOND)
-		ELSE DATE_ADD(DATE_ADD(MIN(a.EXPIRED), INTERVAL -30 DAY), INTERVAL 1 SECOND)
-	END AS subsDate,
-	MAX(a.EXPIRED) AS subsExpired,
-	a.paid,
-	b.title,
-	IFNULL(cr.rank, 0) AS `rank`,
-	IFNULL(e.symbol, tsub.symbol) AS symbol,
-	b.medals,
-	b.total_active_subs,
-	(a.user_id = b.user_id) AS own,
-	IF (
-		cr.rank = 10
-		AND cr.pips_settled < cr.pips_treshold,
-		1,
-		0
-	) AS suspend,
-	CONCAT("[", GROUP_CONCAT(JSON_OBJECT("subs_id", a.id, "subs", a.subs, "subsExpired", a.EXPIRED, "mute", a.mute, "created_at", a.CREATED_AT, "price", IFNULL(d.bill_total, 0))), "]") AS detail,
-	b.total_score,
-	IF (
-		b.image IS NOT NULL
-		AND b.image != "",
-		CONCAT('https://staticdev.tradersfamily.id/', b.image),
-		NULL
-	) AS avatar
-FROM
-	dsc_subs a
-	INNER JOIN dsc_channels b ON a.channel_id = b.id AND b.user_id != ? -- bukann chanel dia sendiri
-	LEFT JOIN dsc_payment d ON a.paid = d.bill_no
-	LEFT JOIN dsc_subs_details e ON e.subs_id = a.id
-	AND e.symbol = 'ALL'
-	LEFT JOIN (
-		SELECT
-			a.subs_id,
-			GROUP_CONCAT(a.symbol SEPARATOR ",") AS symbol
-		FROM
-			dsc_subs_details a
-		WHERE
-			a.symbol != 'ALL'
-		GROUP BY
-			a.subs_id
-	) AS tsub ON tsub.subs_id = a.id
-	LEFT JOIN dsc_channels_rank cr ON cr.channel_id = a.channel_id
-WHERE
-	a.user_id = ? -- seuai dengan user itu sendiri
-	-- AND b.banned = 0
-	AND a.EXPIRED > UTC_TIMESTAMP
-GROUP BY
-	a.channel_id,
-	IFNULL(e.symbol, tsub.symbol)
-HAVING
-	subsExpired > UTC_TIMESTAMP ()
+WITH paid_subs AS (
+    -- PAID SUBS
+    SELECT
+        dc.id AS channel_id,
+        dc.title AS channel_name,
+--         dc.price as channel_price,
+        dp.cust_no AS customer_id,
+        dp.cust_name AS customer_name,
+        dsu.CREATED_AT AS sub_created_at,
+        dsu.EXPIRED AS sub_expired,
+        ROW_NUMBER() OVER (
+            PARTITION BY dp.cust_no, dsu.channel_id
+            ORDER BY dsu.CREATED_AT DESC
+        ) AS rn,
+        IFNULL(CONVERT_TZ(mrg.last_trade, '+00:00', '+07:00'), '') AS last_trade_jakarta
+    FROM dsc_subs dsu
+    INNER JOIN dsc_channels dc ON dsu.channel_id = dc.id
+    INNER JOIN dsc_payment dp ON dsu.paid = dp.bill_no
+    INNER JOIN dsc_subs_details dsd ON dsd.subs_id = dsu.id
+    LEFT JOIN affiliate_mrg_users_stats mrg ON dsu.user_id = mrg.mrg_id
+    WHERE dc.price != 0
+   )
+   
+SELECT ps.customer_id, ps.customer_name, JSON_ARRAYAGG(
+        JSON_OBJECT(
+            'channel_id', ps.channel_id,
+            'channel_name', ps.channel_name,
+            'sub_created_at', ps.sub_created_at,
+            'sub_expired', ps.sub_expired
+        )
+    ) AS list_channels,
+    ps.last_trade_jakarta
+FROM paid_subs ps
+WHERE ps.rn = 1
+GROUP BY ps.customer_id, ps.customer_name
