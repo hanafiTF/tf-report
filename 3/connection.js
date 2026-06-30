@@ -2,7 +2,7 @@
  * test-conn.js — cek koneksi ke DB tf2
  * Jalankan: node test-conn.js
  */
-require('dotenv').config();
+require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
 const mariadb = require('mariadb');
 
 async function main() {

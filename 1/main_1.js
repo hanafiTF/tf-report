@@ -1,7 +1,7 @@
 /**
  * main.js — CommonJS
  */
-require('dotenv').config();
+require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
 
 const mariadb = require('mariadb');
 const fs      = require('fs');
