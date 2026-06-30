@@ -1,4 +1,0 @@
-1. cek semua channel(banned atau bukan). jika channel tersebut tidak membuat signal selama 3 bulan dari hari sekarang di anggap channel terlantar|
-kadang orang juga buat channel doang kaga buat signal
-2. cek maenmeta2 dengan query investor simpan ke dalam dengan WHERE dari point 1
-3. "stop post signal" gue anggep kalau user itu harus berhenti create signal baru lalu deposit dan engga bikin signal lagi. create_signal < deposit , create_signal bisia null
